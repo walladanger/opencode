@@ -100,6 +100,13 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run lint:effect-simplifications
 
+      # Blacksmith images ship ripgrep; GitHub-hosted runners used by forks do not.
+      - name: Install ripgrep (fork runners)
+        if: github.repository != 'anomalyco/opencode'
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then choco install ripgrep -y --no-progress; else sudo apt-get update -q && sudo apt-get install -y -q ripgrep; fi
+          rg --version || echo "rg not yet on PATH in this step"
+
       - name: Configure git identity
         run: |
           git config --global user.email "bot@opencode.ai"
