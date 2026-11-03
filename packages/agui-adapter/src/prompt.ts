@@ -34,11 +34,23 @@ export function promptText(input: PromptSource) {
   return [body, context, resume].filter((part) => part.length > 0).join("\n\n")
 }
 
-export function directoryFrom(forwardedProps: unknown, fallback?: string) {
-  if (!forwardedProps || typeof forwardedProps !== "object" || Array.isArray(forwardedProps)) return fallback
-  if (!("directory" in forwardedProps)) return fallback
-  if (typeof forwardedProps.directory !== "string" || forwardedProps.directory.length === 0) return fallback
+export function directoryFrom(forwardedProps: unknown) {
+  if (!forwardedProps || typeof forwardedProps !== "object" || Array.isArray(forwardedProps)) return
+  if (!("directory" in forwardedProps)) return
+  if (typeof forwardedProps.directory !== "string" || forwardedProps.directory.length === 0) return
   return forwardedProps.directory
+}
+
+/** Uses a client directory only when it is the configured server directory or on the allowlist. */
+export function resolveDirectory(
+  forwardedProps: unknown,
+  config: { readonly directory?: string; readonly allowedDirectories: readonly string[] },
+) {
+  const requested = directoryFrom(forwardedProps)
+  if (!requested) return config.directory
+  if (requested === config.directory) return requested
+  if (config.allowedDirectories.includes(requested)) return requested
+  return config.directory
 }
 
 export type AcceptedRun = {

@@ -30,6 +30,7 @@ const api: OpenCodeApi = {
       throw new Error("missing")
     },
     create: async (input) => ({ id: input.id ?? "ses_created" }),
+    interrupt: async () => ({}),
     prompt: async (input, options) => {
       prompts.push({ sessionID: input.sessionID, text: input.text, headers: options })
       const sessionID = input.sessionID
@@ -81,7 +82,12 @@ describe("listen", () => {
   test("forwards RunAgentInput and streams the translated run", async () => {
     resetQueue()
     const adapter = listen({
-      config: configFromEnv({ AGUI_HOST: "127.0.0.1", AGUI_PORT: "0", AGUI_RUN_TIMEOUT_MS: "5000" }),
+      config: configFromEnv({
+        AGUI_HOST: "127.0.0.1",
+        AGUI_PORT: "0",
+        AGUI_RUN_TIMEOUT_MS: "5000",
+        AGUI_ALLOWED_DIRECTORIES: "/work tree",
+      }),
       api,
     })
     stop = () => adapter.stop()
@@ -105,7 +111,7 @@ describe("listen", () => {
         headers: { headers: { "x-opencode-directory": encodeURIComponent("/work tree") } },
       },
     ])
-    expect(body).toContain('"type":"RUN_STARTED"')
+    expect(body.match(/"type":"RUN_STARTED"/g)?.length).toBe(1)
     expect(body).toContain('"threadId":"thread-1"')
     expect(body).toContain('"runId":"run-1"')
     expect(body).toContain('"type":"TEXT_MESSAGE_CONTENT"')

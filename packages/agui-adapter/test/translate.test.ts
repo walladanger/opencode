@@ -210,6 +210,63 @@ describe("translate", () => {
   test("ignores events that are not part of the adapter contract", () => {
     expect(translate(new Translator(), event("server.connected", {})).length).toBe(0)
   })
+
+  test("ignores TEXT_MESSAGE_END when that message was never opened", () => {
+    expect(
+      translate(
+        new Translator(),
+        event("session.text.ended", { sessionID: session, assistantMessageID: "msg_1", ordinal: 0, text: "nope" }),
+      ),
+    ).toEqual([])
+  })
+
+  test("prefers callID over id for tool calls", () => {
+    const events = translate(
+      new Translator(),
+      event("session.tool.input.started", {
+        sessionID: session,
+        assistantMessageID: "msg_1",
+        id: "internal",
+        callID: "call_real",
+        name: "bash",
+      }),
+    )
+    expect(events[0]).toMatchObject({ type: EventType.TOOL_CALL_START, toolCallId: "call_real", toolCallName: "bash" })
+  })
+
+  test("uses the session id and event id when no AG-UI run is bound", () => {
+    const events = translate(new Translator(), event("session.execution.started", { sessionID: "ses_9" }, "evt_9"))
+    expect(events[0]).toMatchObject({ type: EventType.RUN_STARTED, threadId: "ses_9", runId: "evt_9" })
+  })
+
+  test("emits RUN_STARTED once when the adapter already announced the run", () => {
+    const translator = new Translator()
+    translator.bind(session, { threadId: "thread-1", runId: "run-1", announced: true })
+    expect(translate(translator, event("session.execution.started", { sessionID: session }))).toEqual([])
+  })
+
+  test("clears per-session translator state when the run finishes", () => {
+    const translator = new Translator()
+    translate(
+      translator,
+      event("session.text.delta", { sessionID: session, assistantMessageID: "msg_1", ordinal: 0, delta: "a" }),
+    )
+    translate(
+      translator,
+      event("message.part.updated", {
+        sessionID: session,
+        part: { id: "prt_1", sessionID: session, messageID: "msg_1", type: "tool", callID: "call_1", tool: "bash" },
+      }),
+    )
+    expect(translator.openText.size).toBe(1)
+    expect(translator.parts.size).toBe(1)
+    translate(translator, event("session.execution.succeeded", { sessionID: session }))
+    expect(translator.runs.size).toBe(0)
+    expect(translator.openText.size).toBe(0)
+    expect(translator.parts.size).toBe(0)
+    expect(translator.partCall.size).toBe(0)
+    expect(translator.toolSession.size).toBe(0)
+  })
 })
 
 function event(type: string, data: Record<string, unknown>, id = "evt_1"): WireEvent {

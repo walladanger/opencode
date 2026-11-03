@@ -7,23 +7,54 @@ export type WireEvent = {
   readonly data?: unknown
 }
 
-type RunRef = { readonly threadId: string; readonly runId: string }
+type RunRef = { readonly threadId: string; readonly runId: string; announced: boolean }
 type PartKind = "text" | "reasoning" | "tool"
 
 export class Translator {
   readonly runs = new Map<string, RunRef>()
+  readonly suppressed = new Set<string>()
   readonly parts = new Map<string, PartKind>()
+  readonly partSession = new Map<string, string>()
   readonly partCall = new Map<string, string>()
   readonly partName = new Map<string, string>()
   readonly openText = new Map<string, string>()
   readonly openReasoning = new Map<string, string>()
   readonly openTools = new Map<string, { readonly sessionID: string; readonly parentMessageId?: string }>()
+  readonly toolSession = new Map<string, string>()
   readonly toolArgs = new Set<string>()
   readonly toolEnded = new Set<string>()
   readonly toolResulted = new Set<string>()
 
-  bind(sessionID: string, run: RunRef) {
-    this.runs.set(sessionID, run)
+  bind(sessionID: string, run: { readonly threadId: string; readonly runId: string; announced?: boolean }) {
+    this.suppressed.delete(sessionID)
+    this.runs.set(sessionID, {
+      threadId: run.threadId,
+      runId: run.runId,
+      announced: run.announced ?? false,
+    })
+  }
+
+  /** Drops maps owned by one session after its run ends, so the next run starts clean. */
+  release(sessionID: string) {
+    this.runs.delete(sessionID)
+    this.suppressed.add(sessionID)
+    for (const [messageId, owner] of this.openText) if (owner === sessionID) this.openText.delete(messageId)
+    for (const [messageId, owner] of this.openReasoning) if (owner === sessionID) this.openReasoning.delete(messageId)
+    for (const [id, owner] of this.partSession) {
+      if (owner !== sessionID) continue
+      this.partSession.delete(id)
+      this.parts.delete(id)
+      this.partCall.delete(id)
+      this.partName.delete(id)
+    }
+    for (const [id, owner] of this.toolSession) {
+      if (owner !== sessionID) continue
+      this.toolSession.delete(id)
+      this.openTools.delete(id)
+      this.toolArgs.delete(id)
+      this.toolEnded.delete(id)
+      this.toolResulted.delete(id)
+    }
   }
 }
 
@@ -66,7 +97,11 @@ export function translate(translator: Translator, event: WireEvent): Event[] {
 function executionStarted(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
   const sessionID = stringField(data, "sessionID")
   if (!sessionID) return []
+  translator.suppressed.delete(sessionID)
+  const existing = translator.runs.get(sessionID)
+  if (existing?.announced) return []
   const run = runFor(translator, sessionID, event)
+  run.announced = true
   return [
     {
       type: EventType.RUN_STARTED,
@@ -84,10 +119,9 @@ function executionFinished(
   outcome: "success" | "cancelled",
 ): Event[] {
   const sessionID = stringField(data, "sessionID")
-  if (!sessionID) return []
+  if (!sessionID || translator.suppressed.has(sessionID)) return []
   const run = runFor(translator, sessionID, event)
   const closed = closeSession(translator, sessionID, event)
-  translator.runs.delete(sessionID)
   return [
     ...closed,
     {
@@ -104,17 +138,17 @@ function executionFailed(translator: Translator, event: WireEvent, data: Record<
   const sessionID = stringField(data, "sessionID")
   const failure = errorMessage(data?.error)
   if (!sessionID) return [runError(event, failure.message, failure.code, "unknown", event.id ?? "run")]
+  if (translator.suppressed.has(sessionID)) return []
   const run = runFor(translator, sessionID, event)
   const closed = closeSession(translator, sessionID, event)
-  translator.runs.delete(sessionID)
   return [...closed, runError(event, failure.message, failure.code ?? "session.execution.failed", run.threadId, run.runId)]
 }
 
 function sessionError(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
   const failure = errorMessage(data?.error)
   const sessionID = stringField(data, "sessionID")
+  if (sessionID && translator.suppressed.has(sessionID)) return []
   const run = sessionID ? runFor(translator, sessionID, event) : soleRun(translator)
-  if (sessionID) translator.runs.delete(sessionID)
   const closed = sessionID ? closeSession(translator, sessionID, event) : []
   return [
     ...closed,
@@ -145,10 +179,9 @@ function textDelta(
 
 function textEnded(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
   const messageId = textMessageId(data)
-  if (!messageId) return []
-  const opened = translator.openText.has(messageId) ? [] : textStarted(translator, event, data)
+  if (!messageId || !translator.openText.has(messageId)) return []
   translator.openText.delete(messageId)
-  return [...opened, { type: EventType.TEXT_MESSAGE_END, timestamp: stamp(event), messageId }]
+  return [{ type: EventType.TEXT_MESSAGE_END, timestamp: stamp(event), messageId }]
 }
 
 function reasoningStarted(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
@@ -173,17 +206,17 @@ function reasoningDelta(
 
 function reasoningEnded(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
   const messageId = reasoningMessageId(data)
-  if (!messageId) return []
-  const opened = translator.openReasoning.has(messageId) ? [] : reasoningStarted(translator, event, data)
+  if (!messageId || !translator.openReasoning.has(messageId)) return []
   translator.openReasoning.delete(messageId)
-  return [...opened, { type: EventType.REASONING_MESSAGE_END, timestamp: stamp(event), messageId }]
+  return [{ type: EventType.REASONING_MESSAGE_END, timestamp: stamp(event), messageId }]
 }
 
 function toolStarted(translator: Translator, event: WireEvent, data: Record<string, unknown> | undefined): Event[] {
   const sessionID = stringField(data, "sessionID")
-  const toolCallId = stringField(data, "id") ?? stringField(data, "callID")
+  const toolCallId = toolCallIdOf(data)
   if (!sessionID || !toolCallId || translator.openTools.has(toolCallId)) return []
   const parentMessageId = stringField(data, "assistantMessageID") ?? stringField(data, "messageID")
+  translator.toolSession.set(toolCallId, sessionID)
   translator.openTools.set(toolCallId, { sessionID, parentMessageId })
   return [
     {
@@ -202,7 +235,7 @@ function toolDelta(
   data: Record<string, unknown> | undefined,
   delta: string,
 ): Event[] {
-  const toolCallId = stringField(data, "id") ?? stringField(data, "callID")
+  const toolCallId = toolCallIdOf(data)
   if (!toolCallId) return []
   const open = translator.openTools.has(toolCallId) ? [] : toolStarted(translator, event, data)
   translator.toolArgs.add(toolCallId)
@@ -215,12 +248,12 @@ function toolEnded(
   data: Record<string, unknown> | undefined,
   fullText: string | undefined,
 ): Event[] {
-  const toolCallId = stringField(data, "id") ?? stringField(data, "callID")
+  const toolCallId = toolCallIdOf(data)
   if (!toolCallId || translator.toolEnded.has(toolCallId)) return []
   const open = translator.openTools.has(toolCallId) ? [] : toolStarted(translator, event, data)
   const args =
     fullText !== undefined && !translator.toolArgs.has(toolCallId)
-      ? toolDelta(translator, event, { ...data, id: toolCallId }, fullText)
+      ? toolDelta(translator, event, { ...data, callID: toolCallId, id: toolCallId }, fullText)
       : []
   translator.toolEnded.add(toolCallId)
   translator.openTools.delete(toolCallId)
@@ -233,7 +266,7 @@ function toolResult(
   data: Record<string, unknown> | undefined,
   content: string,
 ): Event[] {
-  const toolCallId = stringField(data, "id") ?? stringField(data, "callID")
+  const toolCallId = toolCallIdOf(data)
   if (!toolCallId || translator.toolResulted.has(toolCallId)) return []
   translator.toolResulted.add(toolCallId)
   const ended = translator.toolEnded.has(toolCallId) ? [] : toolEnded(translator, event, data, stringField(data, "text"))
@@ -294,6 +327,7 @@ function partDelta(translator: Translator, event: WireEvent, data: Record<string
       {
         sessionID,
         assistantMessageID: messageID,
+        callID: toolCallId,
         id: toolCallId,
         name: translator.partName.get(partID) ?? "tool",
       },
@@ -358,6 +392,7 @@ function closeSession(translator: Translator, sessionID: string, event: WireEven
     translator.toolEnded.add(toolCallId)
     return [{ type: EventType.TOOL_CALL_END, timestamp: stamp(event), toolCallId } satisfies Event]
   })
+  translator.release(sessionID)
   return [...text, ...reasoning, ...tools]
 }
 
@@ -366,6 +401,8 @@ function rememberPart(translator: Translator, part: Record<string, unknown> | un
   const type = stringField(part, "type")
   if (!id) return
   if (type === "text" || type === "reasoning" || type === "tool") translator.parts.set(id, type)
+  const sessionID = stringField(part, "sessionID")
+  if (sessionID) translator.partSession.set(id, sessionID)
   const callID = stringField(part, "callID")
   if (callID) translator.partCall.set(id, callID)
   const name = stringField(part, "tool")
@@ -410,9 +447,13 @@ function isStateUpdate(type: string) {
 function runFor(translator: Translator, sessionID: string, event: WireEvent): RunRef {
   const bound = translator.runs.get(sessionID)
   if (bound) return bound
-  const created = { threadId: sessionID, runId: event.id ?? `run_${sessionID}` }
+  const created = { threadId: sessionID, runId: event.id ?? `run_${sessionID}`, announced: false }
   translator.runs.set(sessionID, created)
   return created
+}
+
+function toolCallIdOf(data: Record<string, unknown> | undefined) {
+  return stringField(data, "callID") ?? stringField(data, "id")
 }
 
 function soleRun(translator: Translator) {

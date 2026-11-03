@@ -1,5 +1,5 @@
-export { configFromEnv, publicConfig, publicError, type AdapterConfig } from "./config.js"
-export { acceptedRun, directoryFrom, promptText, type AcceptedRun } from "./prompt.js"
+export { configFromEnv, isLoopback, publicConfig, publicError, type AdapterConfig } from "./config.js"
+export { acceptedRun, directoryFrom, promptText, resolveDirectory, type AcceptedRun } from "./prompt.js"
 export { listen, type ListenOptions } from "./server.js"
 export { encodeSse } from "./sse.js"
 export { Translator, sessionOf, translate, type WireEvent } from "./translate.js"

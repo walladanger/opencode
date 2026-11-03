@@ -24,15 +24,24 @@ The process listens on `127.0.0.1:4097` unless configured otherwise. Point an `@
 | `GET` | `/events` | Multiplexed AG-UI stream for every translated OpenCode event. |
 | `GET` | `/health` | Liveness. Reports host and port only. |
 
-`RunAgentInput.threadId` is the AG-UI thread. When it is an OpenCode session id (`ses_…`) the adapter reuses that session; otherwise it creates one. The working directory, when the run needs one, comes from `forwardedProps.directory` or `OPENCODE_SERVER_DIRECTORY` and is sent as `x-opencode-directory`.
+`RunAgentInput.threadId` is the AG-UI thread. When it is an OpenCode session id (`ses_…`) the adapter reuses that session; otherwise it creates one. A second `POST` for a thread that already has an active run returns 409. The session map keeps at most 256 threads.
+
+`forwardedProps.directory` is sent as `x-opencode-directory` only when it equals `OPENCODE_SERVER_DIRECTORY` or is listed in `AGUI_ALLOWED_DIRECTORIES`. Any other value is ignored and the configured server directory is used instead.
+
+The adapter emits `RUN_STARTED` once when it accepts the `POST`. A later `session.execution.started` for that same bound run is not emitted again. If `session.execution.started` arrives with no AG-UI run bound to the session, `threadId` is the OpenCode session id and `runId` is the OpenCode event id (`evt_…`), or `run_${sessionID}` when the event has no id.
+
+Client disconnect and run timeout call `session.interrupt`. A broken upstream subscription emits `RUN_ERROR` (`agui.disconnected`) for every open run and reconnects with exponential backoff. A client that stops reading is dropped at the stream high-water mark so it cannot stall the upstream subscription.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AGUI_HOST` | `127.0.0.1` | Bind address. The default is loopback. Another host is reachable without adapter auth. |
+| `AGUI_HOST` | `127.0.0.1` | Bind address. A non-loopback host refuses to start unless `AGUI_TOKEN` is set. |
 | `AGUI_PORT` | `4097` | Bind port. `0` asks the OS for a port. |
-| `AGUI_RUN_TIMEOUT_MS` | `600000` | How long a `POST` stream waits for a terminal OpenCode execution. |
+| `AGUI_TOKEN` | unset | Bearer token required on every request when set. Never logged. |
+| `AGUI_ALLOWED_ORIGINS` | unset | Comma-separated browser origins. A request with any other `Origin` is rejected. No `Access-Control-Allow-Origin` is sent unless the request's origin is on this list, and the value is that origin rather than `*`. |
+| `AGUI_ALLOWED_DIRECTORIES` | unset | Comma-separated directories a run may select via `forwardedProps.directory`. Anything else is ignored. |
+| `AGUI_RUN_TIMEOUT_MS` | `600000` | How long a `POST` stream waits for a terminal OpenCode execution. On timeout the adapter interrupts the session. |
 | `OPENCODE_SERVER_URL` | `http://127.0.0.1:4096` | OpenCode server origin. |
 | `OPENCODE_SERVER_USERNAME` | `opencode` | Basic-auth user when a password is set. |
 | `OPENCODE_SERVER_PASSWORD` or `OPENCODE_PASSWORD` | unset | Basic-auth password. Sent as `Authorization` and never logged. |
@@ -49,7 +58,7 @@ The current public stream (`packages/protocol/src/groups/event.ts`, fed by `pack
 
 | OpenCode event | AG-UI event |
 | --- | --- |
-| `session.execution.started` | `RUN_STARTED` (`threadId` is the bound AG-UI thread, otherwise the session id) |
+| `session.execution.started` | `RUN_STARTED` only when this run was not already announced by `POST`. `threadId` / `runId` are the bound AG-UI ids, or the unbound pair described above. |
 | `session.execution.succeeded` | `RUN_FINISHED` with outcome `success` |
 | `session.execution.interrupted` | `RUN_FINISHED` with outcome `cancelled` |
 | `session.execution.failed`, `session.error` | `RUN_ERROR` |
@@ -69,9 +78,9 @@ Spans use `Observability.layer` from `packages/util/src/observability.ts` (`@eff
 
 | Span | When |
 | --- | --- |
-| `agui.translate` | One OpenCode event. Attribute: `opencode.event` |
-| `agui.run` | `session.prompt` for one AG-UI run. Attributes: `agui.thread_id`, `agui.run_id`, `opencode.session_id` |
-| `agui.subscribe` | The upstream stream dropped. The log attribute is a redacted message, then the adapter waits one second and reconnects. |
+| `agui.run` | The whole admitted run: prompt, wait, and interrupt on failure. Attributes: `agui.thread_id`, `agui.run_id`, `opencode.session_id`. |
+| `agui.subscribe` | Held open for the process. Translations are span events named `agui.translate` (`opencode.event`), sampled to every 32nd event plus execution and `session.error` events. |
+| `agui.subscribe` (child, on failure) | The upstream stream dropped. The log attribute is a redacted message. The adapter then sleeps with exponential backoff on the same runtime and reconnects. |
 
 Prompt text, authorization, and exporter headers are not span attributes.
 
@@ -101,7 +110,7 @@ Electron main-process tracing is not wired. `@opencode/desktop` does not depend 
 - Resume entries are appended to the prompt text. OpenCode has no AG-UI interrupt channel.
 - User message parts other than text are omitted from the prompt. `contentToText` from `@ag-ui/core` is used for the text parts.
 - Tool file results become a single `[file] {uri}` line inside `TOOL_CALL_RESULT`.
-- The adapter does not terminate an OpenCode session when the HTTP client disconnects.
+- Client disconnect and run timeout call `session.interrupt` for that session.
 
 ## Tests
 

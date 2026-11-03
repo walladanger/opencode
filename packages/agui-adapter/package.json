@@ -15,7 +15,7 @@
   "scripts": {
     "start": "bun ./src/cli.ts",
     "test": "bun test --timeout 10000",
-    "typecheck": "bun check --no-script && bun check --no-script -p test/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit",
     "typecheck:tsc": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ export type OpenCodeApi = {
       },
       options?: RequestOptions,
     ) => Promise<unknown>
+    readonly interrupt: (input: { readonly sessionID: string }, options?: RequestOptions) => Promise<unknown>
   }
   readonly event: {
     readonly subscribe: (signal: AbortSignal) => AsyncIterable<WireEvent>
@@ -35,6 +36,7 @@ export function openCodeApi(config: AdapterConfig): OpenCodeApi {
       get: (input, options) => client.session.get(input, options),
       create: (input, options) => client.session.create(input, options),
       prompt: (input, options) => client.session.prompt(input, options),
+      interrupt: (input, options) => client.session.interrupt(input, options),
     },
     event: {
       subscribe(signal) {

@@ -4,6 +4,9 @@ export type AdapterConfig = {
   readonly serverUrl: string
   readonly authorization?: string
   readonly directory?: string
+  readonly allowedDirectories: readonly string[]
+  readonly allowedOrigins: readonly string[]
+  readonly token?: string
   readonly runTimeoutMs: number
 }
 
@@ -12,9 +15,29 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterConf
   const port = portFrom(env.AGUI_PORT)
   const serverUrl = (env.OPENCODE_SERVER_URL?.trim() || "http://127.0.0.1:4096").replace(/\/$/, "")
   const directory = env.OPENCODE_SERVER_DIRECTORY?.trim() || undefined
+  const allowedDirectories = list(env.AGUI_ALLOWED_DIRECTORIES)
+  const allowedOrigins = list(env.AGUI_ALLOWED_ORIGINS)
+  const token = env.AGUI_TOKEN?.trim() || undefined
   const runTimeoutMs = timeoutFrom(env.AGUI_RUN_TIMEOUT_MS)
   const authorization = authorizationHeader(env)
-  return { host, port, serverUrl, authorization, directory, runTimeoutMs }
+  const config = {
+    host,
+    port,
+    serverUrl,
+    authorization,
+    directory,
+    allowedDirectories,
+    allowedOrigins,
+    token,
+    runTimeoutMs,
+  }
+  if (!isLoopback(host) && !token) throw new Error("AGUI_TOKEN is required when AGUI_HOST is not a loopback address")
+  return config
+}
+
+export function isLoopback(host: string) {
+  const value = host.trim().toLowerCase().replace(/^\[|\]$/g, "")
+  return value === "localhost" || value === "::1" || value.startsWith("127.")
 }
 
 /** Fields safe to print. The authorization header and URL userinfo never appear here. */
@@ -25,6 +48,8 @@ export function publicConfig(config: AdapterConfig) {
     serverUrl: redactUrl(config.serverUrl),
     directory: config.directory,
     authorization: config.authorization ? "configured" : "absent",
+    token: config.token ? "configured" : "absent",
+    allowedOrigins: config.allowedOrigins.length,
     runTimeoutMs: config.runTimeoutMs,
   }
 }
@@ -61,6 +86,14 @@ function timeoutFrom(value: string | undefined) {
   const timeout = Number(value)
   if (timeout < 1) throw new Error("AGUI_RUN_TIMEOUT_MS must be a positive integer")
   return timeout
+}
+
+function list(value: string | undefined) {
+  if (!value) return []
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
 }
 
 function redactUrl(value: string) {
