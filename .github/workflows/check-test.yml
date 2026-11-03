@@ -31,7 +31,7 @@ jobs:
   affected:
     name: affected packages
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     outputs:
       e2e: ${{ steps.packages.outputs.app }}
     steps:
@@ -72,7 +72,7 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.settings.host, 'blacksmith')) && matrix.settings.host || (contains(matrix.settings.host, 'windows') && 'windows-latest' || endsWith(matrix.settings.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     defaults:
       run:
         shell: bash
@@ -99,6 +99,13 @@ jobs:
       - name: Check Effect simplifications
         if: runner.os == 'Linux'
         run: bun run lint:effect-simplifications
+
+      # Blacksmith images ship ripgrep; GitHub-hosted runners used by forks do not.
+      - name: Install ripgrep (fork runners)
+        if: github.repository != 'anomalyco/opencode'
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then choco install ripgrep -y --no-progress; else sudo apt-get update -q && sudo apt-get install -y -q ripgrep; fi
+          rg --version || echo "rg not yet on PATH in this step"
 
       - name: Configure git identity
         run: |
@@ -158,7 +165,7 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.settings.host, 'blacksmith')) && matrix.settings.host || (contains(matrix.settings.host, 'windows') && 'windows-latest' || endsWith(matrix.settings.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     defaults:
       run:
         shell: bash
@@ -237,7 +244,7 @@ jobs:
             shard: 2/2
           - id: session-ui-components
           - id: app-components
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.settings.host, 'blacksmith')) && matrix.settings.host || (contains(matrix.settings.host, 'windows') && 'windows-latest' || endsWith(matrix.settings.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
       # Beta only (packages/app/e2e/QUARANTINE.md): gate legs skip quarantined tests, retry once and stop after 8
@@ -336,7 +343,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux, windows]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     steps:
       - name: Check browser test results
         env:
