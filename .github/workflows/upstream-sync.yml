@@ -1,0 +1,73 @@
+name: upstream-sync
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'walladanger/opencode'
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM: https://github.com/anomalyco/opencode.git
+      BASE: dev
+      CUSTOM: custom/branding
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.CUSTOM }}
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM"
+          git fetch --no-tags upstream "$BASE"
+          git fetch --no-tags origin "$BASE" "$CUSTOM"
+
+      - name: Fast-forward default branch (never forced)
+        run: |
+          if git merge-base --is-ancestor "origin/$BASE" "upstream/$BASE"; then
+            git push origin "upstream/$BASE:refs/heads/$BASE"
+          else
+            echo "::error::origin/$BASE has diverged from upstream/$BASE; refusing to force-push."
+            exit 1
+          fi
+
+      - name: Rebase custom branch
+        id: rebase
+        run: |
+          OLD=$(git rev-parse "origin/$CUSTOM")
+          git checkout -B "$CUSTOM" "origin/$CUSTOM"
+          if git rebase "upstream/$BASE"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort || true
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push custom branch
+        if: steps.rebase.outputs.ok == 'true'
+        run: git push --force-with-lease="refs/heads/$CUSTOM:${{ steps.rebase.outputs.old }}" origin "HEAD:refs/heads/$CUSTOM"
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.ok == 'false'
+        run: |
+          title="upstream-sync: rebase conflict on $CUSTOM"
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "Issue already open."; exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "Rebasing \`$CUSTOM\` onto upstream \`$BASE\` ($(git rev-parse --short upstream/$BASE)) hit conflicts. Nothing was pushed to \`$CUSTOM\`. Resolve locally: \`git fetch upstream && git checkout $CUSTOM && git rebase upstream/$BASE\`, then push with --force-with-lease. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
