@@ -27,6 +27,26 @@
         "turbo": "2.10.2",
       },
     },
+    "packages/agui-adapter": {
+      "name": "@opencode/agui-adapter",
+      "version": "2.2.5",
+      "bin": {
+        "opencode-agui": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@ag-ui/core": "1.0.3",
+        "@effect/platform-node": "catalog:",
+        "@opencode/client": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/ai": {
       "name": "@opencode/ai",
       "version": "2.2.5",
@@ -1109,6 +1129,8 @@
     "zod": "4.6.7",
   },
   "packages": {
+    "@ag-ui/core": ["@ag-ui/core@1.0.3", "", { "peerDependencies": { "zod": "^3.25.18 || ^4.0.0" }, "optionalPeers": ["zod"] }, "sha512-HdMdZPOqworKlnzLaNktnbNYgIzOPbzt5ow6J4bPhbmHCdpWpCSZQFgkifQkn1zVHgCK1V+pmKc8xtW6FsQZKA=="],
+
     "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@1.6.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-XxXrmX7aZkDgOB0Rg9cu+ZFyiUUc5lF2n9seO3Gc4OR+MTdfZOwIqF6m3LvsmmM8K3qgPmXkDH8/IFM2u9vdcQ=="],
 
     "@ai-sdk/openai-compatible": ["@ai-sdk/openai-compatible@2.0.41", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-kNAGINk71AlOXx10Dq/PXw4t/9XjdK8uxfpVElRwtSFMdeSiLVt58p9TPx4/FJD+hxZuVhvxYj9r42osxWq79g=="],
@@ -1892,6 +1914,8 @@
     "@opencode-ai/protocol": ["@opencode-ai/protocol@0.0.0-beta-18050", "", { "dependencies": { "@opencode-ai/schema": "0.0.0-beta-18050", "effect": "4.0.0-rc.111" } }, "sha512-HDQMnvGp8IU0MdBRbEuydX1WQm09BZ4HJm9iSMQwzweJuQ2HNscgzHJPIH6P02BsbbtfJ8J7sZGPItrz1tWSgw=="],
 
     "@opencode-ai/schema": ["@opencode-ai/schema@0.0.0-beta-18050", "", { "dependencies": { "@standard-schema/spec": "1.1.0", "effect": "4.0.0-rc.111" } }, "sha512-/D6VXaWlytTXR3IOiMLIKuPcfp7FQNUzRPm9z3K7UBFd1Bw4q/WZksaf5RVcBGz+0YRxYMc1V4D7MFlceSgtyg=="],
+
+    "@opencode/agui-adapter": ["@opencode/agui-adapter@workspace:packages/agui-adapter"],
 
     "@opencode/ai": ["@opencode/ai@workspace:packages/ai"],
 
