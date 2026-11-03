@@ -88,7 +88,7 @@ jobs:
   # Fetches the models.dev catalog once per run, so every CLI bundles the same copy.
   models-catalog:
     needs: [plan, tag]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 10
     env: *env
     steps:
@@ -111,7 +111,7 @@ jobs:
 
   build-cli:
     needs: [plan, tag, models-catalog]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env: *env
     steps:
@@ -156,7 +156,7 @@ jobs:
           - { target: darwin-arm64, host: macos-26 }
           - { target: windows-arm64, host: blacksmith-4vcpu-windows-2025 }
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
-    runs-on: ${{ matrix.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.host, 'blacksmith')) && matrix.host || (contains(matrix.host, 'windows') && 'windows-latest' || endsWith(matrix.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     env: *env
     steps:
       - *checkout
@@ -195,7 +195,7 @@ jobs:
   build-npm:
     needs: [plan, tag, build-cli, build-node]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env: *env
     steps:
@@ -231,7 +231,7 @@ jobs:
   build-docker:
     needs: [plan, tag, build-cli]
     if: needs.plan.outputs.release == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     env: *env
     steps:
       - *checkout
@@ -275,7 +275,7 @@ jobs:
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
           - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
           - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
-    runs-on: ${{ matrix.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.host, 'blacksmith')) && matrix.host || (contains(matrix.host, 'windows') && 'windows-latest' || endsWith(matrix.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     env: *env
     steps:
       - *checkout
@@ -334,7 +334,7 @@ jobs:
             host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
             install: --cpu=*
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
-    runs-on: ${{ matrix.host }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' || !startsWith(matrix.host, 'blacksmith')) && matrix.host || (contains(matrix.host, 'windows') && 'windows-latest' || endsWith(matrix.host, '-arm') && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     env: *env
     steps:
       - *checkout

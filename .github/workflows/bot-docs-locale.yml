@@ -11,7 +11,7 @@ jobs:
   sync-locales:
     if: false
     #if: github.actor != 'opencode-agent[bot]'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     environment: release
     permissions:
       contents: write
