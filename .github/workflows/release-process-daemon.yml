@@ -238,6 +238,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: github.repository == 'anomalyco/opencode'
     needs: [build, build-windows]
     runs-on: ubuntu-22.04
     permissions:

@@ -40,11 +40,19 @@ function resolveChannel() {
   return "dev"
 }
 
+// Fork (walladanger/opencode): own identity so builds never clash with official installs.
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "com.walladanger.opencode.dev",
+  beta: "com.walladanger.opencode.beta",
+  prod: "com.walladanger.opencode",
 } as const
+
+// Fork: the single update switch. Off by default, so no app-update.yml is written and the updater stays disabled.
+// OPENCODE_FORK_UPDATES=1 publishes to / updates from walladanger/opencode GitHub releases. Never opencode.ai.
+const forkPublish = () =>
+  process.env.OPENCODE_FORK_UPDATES === "1"
+    ? { provider: "github" as const, owner: "walladanger", repo: "opencode", channel: "latest" }
+    : null
 
 // libappimage (used by AppImageLauncher) resolves the .desktop entry inside an
 // AppImage by globbing `*.desktop` at the squashfs root. If the main
@@ -218,15 +226,11 @@ export function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/dev/desktop/opencode/",
-          channel: "latest",
-        },
+        productName: "OpenCode (Warwick) Dev",
+        publish: forkPublish(),
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
-          packageName: "opencode-dev",
+          packageName: "opencode-warwick-dev",
           fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
         },
       }
@@ -236,16 +240,12 @@ export function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/beta/desktop/opencode/",
-          channel: "latest",
-        },
+        productName: "OpenCode (Warwick) Beta",
+        protocols: { name: "OpenCode (Warwick) Beta", schemes: ["opencode"] },
+        publish: forkPublish(),
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
-          packageName: "opencode-beta",
+          packageName: "opencode-warwick-beta",
           fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
         },
       }
@@ -255,20 +255,17 @@ export function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
+        productName: "OpenCode (Warwick)",
+        protocols: { name: "OpenCode (Warwick)", schemes: ["opencode"] },
         // An Icon Composer package compiles to Assets.car, which macOS 26 and later draw the app icon from
         // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.
         mac: { ...base.mac, icon: "resources/icons/icon.icon" },
         // The DMG volume icon would otherwise use the same actool-generated ICNS.
         dmg: { icon: "resources/icons/icon.icns" },
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/latest/desktop/opencode/",
-          channel: "latest",
-        },
-        deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
+        publish: forkPublish(),
+        // Fork: no legacy opencode-desktop.desktop entry; it would collide with the official package's file.
+        deb: { fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-warwick", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
   }
