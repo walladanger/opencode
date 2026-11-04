@@ -1,6 +1,6 @@
 # Chat-native capabilities for OpenCode
 
-Status: DRAFT. Gate G0 decided. Gate G2 (config writes) OPEN. Do not start Phase 4 writes until G2 is answered.
+Status: DRAFT. Gate G0 decided. Gate G2 decided (direct write with backups). Q7 decided (look work parked on its own branch).
 
 ## 0. Decisions
 
@@ -11,7 +11,7 @@ Status: DRAFT. Gate G0 decided. Gate G2 (config writes) OPEN. Do not start Phase
 | D3 | Per-chat override | Stored server-side per session. Shown as a chip when active. |
 | D4 | UI label | "MCP servers". Never "Connectors". |
 | D5 | Platforms | Windows, macOS, Linux from day one. CI matrix on all three. |
-| D6 | Config writes | OPEN (G2). Options: (a) direct write with backups, (b) show-only + "Open in editor". |
+| D6 | Config writes | Direct write with backups (owner decision, Q6). Last 10 backups, atomic rename. |
 
 ## 1. Architecture facts that constrain the design
 
@@ -85,7 +85,7 @@ Each step: ID, lane, dependencies, a "done when" that a reviewer can check witho
 
 | ID | Step | Lane | Deps | Done when |
 |---|---|---|---|---|
-| P0.0 | Owner decides what to do with the uncommitted look work (land, stash, or keep separate branch). Record in `docs/plan/decisions.md` | REV | none | Decision line exists |
+| P0.0 | Park uncommitted look work on its own branch (owner decision, Q7). Commit only those 11 paths; leave composer work on a clean tree | REV | none | Look branch exists on GitHub; `dev`-based work tree clean |
 | P0.1 | Record baseline SHA and `git status` output in `docs/plan/baseline.md` | REG | P0.0 | File exists, lists all 10 modified/untracked paths |
 | P0.2 | Build and run desktop app from source on Windows; capture screenshot of Settings → Plugins | QA | P0.1 | PNG in `docs/plan/baseline/` |
 | P0.3 | List every file that renders the composer (input, toolbar, attach button) with line counts | CMP | P0.1 | Table in `docs/plan/baseline.md` |
@@ -162,7 +162,7 @@ Built as core components in `packages/app`. Depends on P0.8 and P1.6.
 
 ---
 
-## Phase 4: Config I/O (CFG). PAUSED on G2 except P4.1–P4.3
+## Phase 4: Config I/O (CFG). Unblocked: G2 = direct write with backups
 
 | ID | Step | Deps | Done when |
 |---|---|---|---|
@@ -179,7 +179,7 @@ Built as core components in `packages/app`. Depends on P0.8 and P1.6.
 | P4.11 | Plugin full disable writes `"-plugin-id"` into `plugins` | G2, P4.2 | Plugin off after reload |
 | P4.12 | Scope routing: global, project, session go to the right file | G2, P2.8 | Each scope test |
 
-Checkpoint G2: choose full-file rewrite or structured patch from P4.1–P4.2 results. Owner answers Q6 below.
+Checkpoint G2: decided (direct write with backups). Remaining choice, full-file rewrite or structured patch, follows P4.1–P4.2 test results.
 
 ---
 
@@ -285,5 +285,4 @@ Routes: `/capabilities/skill/:id`, `/capabilities/mcp/:id`, `/capabilities/plugi
 
 ## Open questions
 
-- Q6 (G2, config writes): Write `opencode.json` directly with backups (recommended in ADR draft), or show-only with an "Open in editor" button? Paused by owner.
-- Q7 (P0.0): Land the uncommitted look work first, stash it, or keep it on its own branch?
+- None. Q6 and Q7 are decided (see §0 and P0.0).
